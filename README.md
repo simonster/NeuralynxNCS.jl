@@ -1,7 +1,7 @@
-# NCS
+# NeuralynxNCS
 
-[![Build Status](https://travis-ci.org/simonster/NCS.jl.svg?branch=master)](https://travis-ci.org/simonster/NCS.jl)
-[![Coverage Status](https://coveralls.io/repos/simonster/NCS.jl/badge.svg?branch=master)](https://coveralls.io/r/simonster/NCS.jl?branch=master)
+[![Build Status](https://travis-ci.org/simonster/NeuralynxNCS.jl.svg?branch=master)](https://travis-ci.org/simonster/NeuralynxNCS.jl)
+[![Coverage Status](https://coveralls.io/repos/simonster/NeuralynxNCS.jl/badge.svg?branch=master)](https://coveralls.io/r/simonster/NeuralynxNCS.jl?branch=master)
 
 This is a Julia module for reading Neuralynx NCS files. You can read files as:
 
