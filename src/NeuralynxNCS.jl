@@ -1,4 +1,4 @@
-module NCS
+module NeuralynxNCS
 using PiecewiseIncreasingRanges, Compat
 
 immutable NCSContinuousChannel

@@ -1,4 +1,4 @@
-using NCS, Base.Test
+using NeuralynxNCS, Base.Test
 
 ncs = readncs(joinpath(dirname(@__FILE__), "TestFile.Ncs"))
 @test ncs.header == "######## Neuralynx\r\nTest File\r\n"
