@@ -31,7 +31,7 @@ function readncs(filename::String)
     end
 end
 
-function readncs(io::IO, sz::Union(Integer,Void)=nothing)
+function readncs(io::IO, sz::Union(Integer,Nothing)=nothing)
     header = rstrip(bytestring(read(io, UInt8, 16384)), '\0')
     eof(io) && return NCSContinuousChannel(header, Int16[], PiecewiseIncreasingRange(StepRange{Int,Int}[], 1))
 
@@ -61,7 +61,7 @@ function readncs(io::IO, sz::Union(Integer,Void)=nothing)
         rec.dwChannelNumber == rec1.dwChannelNumber || error("only one channel supported per file")
         rec.dwSampleFreq == rec1.dwSampleFreq || error("sample rate is non-constant")
         read!(io, sample_buffer)
-        isa(sz, Void) && resize!(samples, nsamples+rec.dwNumValidSamples)
+        isa(sz, Nothing) && resize!(samples, nsamples+rec.dwNumValidSamples)
         copy!(samples, nsamples+1, sample_buffer, 1, rec.dwNumValidSamples)
         nsamples += rec.dwNumValidSamples
         nrecs += 1
