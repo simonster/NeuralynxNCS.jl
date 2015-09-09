@@ -25,48 +25,58 @@ end
 function readncs(filename::String)
     io = open(filename, "r")
     try
-        header = rstrip(bytestring(read(io, UInt8, 16384)), '\0')
-        eof(io) && return NCSContinuousChannel(header, Int16[], PiecewiseIncreasingRange(StepRange{Int,Int}[], 1))
-
-        nrecs = div(filesize(filename)-16384, 1044)
-        sample_buffer = Array(Int16, 512)
-        samples = Array(Int16, nrecs*512)
-        nsamples = 0
-        times = Array(StepRange{Int,Int}, nrecs)
-
-        # Read first header so we can save its channel number to make
-        # sure we only have one
-        rec1 = read(io, NCSRecordHeader)
-        read!(io, sample_buffer)
-        copy!(samples, nsamples+1, sample_buffer, 1, rec1.dwNumValidSamples)
-        nsamples += rec1.dwNumValidSamples
-
-        # Figure out range multipliers
-        @compat divisor = lcm(Int64(rec1.dwSampleFreq), 10^6)
-        sample_multiplier = div(divisor, 10^6)
-        @compat step = div(divisor, Int64(rec1.dwSampleFreq))
-
-        nrecs = 1
-        times[1] = compute_times(rec1, sample_multiplier, step)
-
-        while !eof(io)
-            rec = read(io, NCSRecordHeader)
-            rec.dwChannelNumber == rec1.dwChannelNumber || error("only one channel supported per file")
-            rec.dwSampleFreq == rec1.dwSampleFreq || error("sample rate is non-constant")
-            read!(io, sample_buffer)
-            copy!(samples, nsamples+1, sample_buffer, 1, rec.dwNumValidSamples)
-            nsamples += rec.dwNumValidSamples
-            nrecs += 1
-            times[nrecs] = compute_times(rec, sample_multiplier, step)
-        end
-
-        resize!(samples, nsamples)
-        resize!(times, nrecs)
-
-        return NCSContinuousChannel(header, samples, PiecewiseIncreasingRange(times, divisor))
+        readncs(io, filesize(io))
     finally
         close(io)
     end
+end
+
+function readncs(io::IO, sz::Union(Integer,Void)=nothing)
+    header = rstrip(bytestring(read(io, UInt8, 16384)), '\0')
+    eof(io) && return NCSContinuousChannel(header, Int16[], PiecewiseIncreasingRange(StepRange{Int,Int}[], 1))
+
+    nrecs::Int = isa(sz, Integer) ? div(sz-16384, 1044) : -1
+    sample_buffer = Array(Int16, 512)
+    samples = Array(Int16, isa(sz, Integer) ? nrecs*512 : 512)
+    nsamples = 0
+    times = Array(StepRange{Int,Int}, isa(sz, Integer) ? nrecs : 1)
+
+    # Read first header so we can save its channel number to make
+    # sure we only have one
+    rec1 = read(io, NCSRecordHeader)
+    read!(io, sample_buffer)
+    copy!(samples, nsamples+1, sample_buffer, 1, rec1.dwNumValidSamples)
+    nsamples += rec1.dwNumValidSamples
+
+    # Figure out range multipliers
+    @compat divisor = lcm(Int64(rec1.dwSampleFreq), 10^6)
+    sample_multiplier = div(divisor, 10^6)
+    @compat step = div(divisor, Int64(rec1.dwSampleFreq))
+
+    nrecs = 1
+    times[1] = compute_times(rec1, sample_multiplier, step)
+
+    while !eof(io)
+        rec = read(io, NCSRecordHeader)
+        rec.dwChannelNumber == rec1.dwChannelNumber || error("only one channel supported per file")
+        rec.dwSampleFreq == rec1.dwSampleFreq || error("sample rate is non-constant")
+        read!(io, sample_buffer)
+        isa(sz, Void) && resize!(samples, nsamples+rec.dwNumValidSamples)
+        copy!(samples, nsamples+1, sample_buffer, 1, rec.dwNumValidSamples)
+        nsamples += rec.dwNumValidSamples
+        nrecs += 1
+        rectimes = compute_times(rec, sample_multiplier, step)
+        if isa(sz, Integer)
+            times[nrecs] = rectimes
+        else
+            push!(times, rectimes)
+        end
+    end
+
+    resize!(samples, nsamples)
+    resize!(times, nrecs)
+
+    return NCSContinuousChannel(header, samples, PiecewiseIncreasingRange(times, divisor))
 end
 
 export readncs
