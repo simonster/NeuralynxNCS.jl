@@ -22,16 +22,16 @@ function compute_times(rec::NCSRecordHeader, sample_multiplier::Int64, step::Int
     first_sample:step:first_sample+step*(rec.dwNumValidSamples-1)
 end
 
-function readncs(filename::String)
+function readncs(filename::String; kwargs...)
     io = open(filename, "r")
     try
-        readncs(io, filesize(io))
+        readncs(io, filesize(io); kwargs...)
     finally
         close(io)
     end
 end
 
-function readncs(io::IO, sz::Union(Integer,Nothing)=nothing)
+function readncs(io::IO, sz::Union(Integer,Nothing)=nothing; skip_nonmonotonic::Bool=false)
     header = rstrip(bytestring(read(io, UInt8, 16384)), '\0')
     eof(io) && return NCSContinuousChannel(header, Int16[], PiecewiseIncreasingRange(StepRange{Int,Int}[], 1))
 
@@ -49,23 +49,44 @@ function readncs(io::IO, sz::Union(Integer,Nothing)=nothing)
     nsamples += rec1.dwNumValidSamples
 
     # Figure out range multipliers
-    @compat divisor = lcm(Int64(rec1.dwSampleFreq), 10^6)
-    sample_multiplier = div(divisor, 10^6)
-    @compat step = div(divisor, Int64(rec1.dwSampleFreq))
+
+    # This would be correct if the reported sample rate were:
+    # @compat divisor = lcm(Int64(rec1.dwSampleFreq), 10^6)
+    # sample_multiplier = div(divisor, 10^6)
+    # @compat step = div(divisor, Int64(rec1.dwSampleFreq))
+
+    # However, it seems that the reported sample rate is wrong. The
+    # actual sample rate is rounded so that the delta between
+    # timestamps is constant.
+    sample_multiplier = 512
+    divisor = 512*10^6
+    step = div(divisor, rec1.dwSampleFreq)
 
     nrecs = 1
+    reccount = 1
     times[1] = compute_times(rec1, sample_multiplier, step)
 
     while !eof(io)
+        reccount += 1
         rec = read(io, NCSRecordHeader)
         rec.dwChannelNumber == rec1.dwChannelNumber || error("only one channel supported per file")
         rec.dwSampleFreq == rec1.dwSampleFreq || error("sample rate is non-constant")
         read!(io, sample_buffer)
+        rectimes = compute_times(rec, sample_multiplier, step)
+        if first(rectimes) < last(times[nrecs])
+            if skip_nonmonotonic
+                warn("""timestamp at record $(reccount) is not monotonically increasing
+                        (previous end time = $(last(times[nrecs])/divisor), start time = $(first(rectimes)/divisor); skipping""")
+                continue
+            else
+                error("""timestamp at record $(reccount) is not monotonically increasing.
+                         Use readncs(..., skip_nonmotonoic=true) to skip nonmonotonic timestamps""")
+            end
+        end
         isa(sz, Nothing) && resize!(samples, nsamples+rec.dwNumValidSamples)
         copy!(samples, nsamples+1, sample_buffer, 1, rec.dwNumValidSamples)
         nsamples += rec.dwNumValidSamples
         nrecs += 1
-        rectimes = compute_times(rec, sample_multiplier, step)
         if isa(sz, Integer)
             times[nrecs] = rectimes
         else
